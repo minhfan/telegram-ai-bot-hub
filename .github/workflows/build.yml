@@ -1,0 +1,34 @@
+name: Build .exe (Windows)
+
+# Đóng gói app thành .exe trên runner Windows của GitHub (build từ máy Mac/Linux đều được).
+# Chạy tay ở tab Actions, hoặc tự chạy khi push lên main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install customtkinter pyinstaller
+
+      - name: Build .exe (kèm theme của CustomTkinter)
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --collect-all customtkinter
+          --name TelegramAIBotHub app.py
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramAIBotHub-windows
+          path: dist/TelegramAIBotHub.exe
+          if-no-files-found: error
