@@ -794,9 +794,12 @@ class BotRow(ctk.CTkFrame):
         ctk.CTkLabel(self, text="System Prompt — nhân cách bot (sửa thoải mái)", anchor="w",
                      text_color=THEME["muted"], font=F(11)).grid(
             row=4, column=0, columnspan=3, padx=12, pady=(4, 0), sticky="w")
-        self.prompt = ctk.CTkTextbox(self, height=94, fg_color=THEME["bg"], text_color=THEME["text"],
-                                     border_color=THEME["border"], border_width=1, corner_radius=8, font=F(12))
+        self.prompt = ctk.CTkTextbox(self, height=122, fg_color=THEME["bg"], text_color=THEME["text"],
+                                     border_color=THEME["border"], border_width=1, corner_radius=8, font=F(14))
         self.prompt.grid(row=5, column=0, columnspan=3, padx=12, pady=(2, 12), sticky="ew")
+        # Lăn chuột trên textbox -> cuộn ROSTER (đừng để textbox nuốt event) — Tk9/macOS
+        for _seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.prompt._textbox.bind(_seq, self.group.app._on_mousewheel)
 
         self.set_data(data)
 
@@ -895,7 +898,6 @@ class GroupSection(ctk.CTkFrame):
         row = BotRow(self.body, self, self.accent, data if isinstance(data, dict) else None)
         row.pack(fill="x", padx=0, pady=5)
         self.bots.append(row)
-        self.app._bind_mousewheel(row)
         self._update_count()
         return row
 
@@ -976,10 +978,10 @@ class ForgeApp(ctk.CTk):
                                              scrollbar_button_hover_color=THEME["border"])
         self.scroll.grid(row=3, column=0, padx=18, pady=(2, 4), sticky="nsew")
         self.scroll.grid_columnconfigure(0, weight=1)
-        self._bind_mousewheel(self.scroll)
-        cv = getattr(self.scroll, "_parent_canvas", None)
-        if cv is not None:
-            self._bind_one(cv)
+        # Tk9/macOS: CTk không cuộn được bằng wheel -> bind TOÀN CỤC, event nào không bị
+        # widget nuốt đều nổi lên đây -> cuộn canvas của roster.
+        for _seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.bind_all(_seq, self._on_mousewheel, add="+")
 
         # ── footer: skip + start/stop ──
         foot = ctk.CTkFrame(self, fg_color=THEME["surface"], corner_radius=14)
@@ -1003,6 +1005,9 @@ class ForgeApp(ctk.CTk):
                                       font=(_MONO, 11))
         self.log_box.grid(row=6, column=0, padx=20, pady=(2, 16), sticky="ew")
         self.log_box.configure(state="disabled")
+        # lăn trên log cũng cuộn roster (nhất quán, khỏi nhảy 2 vùng)
+        for _seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.log_box._textbox.bind(_seq, self._on_mousewheel)
 
     # ---- status pill ----
     def _set_status(self, text, running):
@@ -1011,27 +1016,18 @@ class ForgeApp(ctk.CTk):
             fg_color=THEME["success"] if running else THEME["surface2"],
             text_color="#0F1117" if running else THEME["muted"])
 
-    # ---- mousewheel (Tk9 / macOS) ----
+    # ---- mousewheel (Tk9 / macOS) — bind toàn cục, cuộn canvas của roster ----
     def _on_mousewheel(self, event):
         cv = getattr(self.scroll, "_parent_canvas", None)
         if cv is None:
             return
         num = getattr(event, "num", 0)
-        if num == 4 or getattr(event, "delta", 0) > 0:
+        delta = getattr(event, "delta", 0)
+        if num == 4 or delta > 0:
             cv.yview_scroll(-3, "units")
-        elif num == 5 or getattr(event, "delta", 0) < 0:
+        elif num == 5 or delta < 0:
             cv.yview_scroll(3, "units")
         return "break"
-
-    def _bind_one(self, widget):
-        widget.bind("<MouseWheel>", self._on_mousewheel)
-        widget.bind("<Button-4>", self._on_mousewheel)
-        widget.bind("<Button-5>", self._on_mousewheel)
-
-    def _bind_mousewheel(self, widget):
-        self._bind_one(widget)
-        for child in widget.winfo_children():
-            self._bind_mousewheel(child)
 
     # ---- log ----
     def _drain_log_queue(self):
@@ -1055,7 +1051,6 @@ class ForgeApp(ctk.CTk):
         g = GroupSection(self.scroll, self, accent, data)
         g.pack(fill="x", padx=4, pady=8)
         self.groups.append(g)
-        self._bind_mousewheel(g)
         return g
 
     def _delete_group(self, group):
